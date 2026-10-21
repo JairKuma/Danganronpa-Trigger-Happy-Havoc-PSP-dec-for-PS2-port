@@ -1,0 +1,725 @@
+=====================================================================
+  NOTAS DEL PROYECTO: DANGANRONPA (PSP, traducción al español)
+  Objetivo: documentar el juego para facilitar un futuro port a PS2
+=====================================================================
+
+LEYENDA
+  [CONFIRMADO] = lo hemos visto directamente
+  [PROBABLE]   = deducción con buenas pistas, falta comprobarlo
+  [PENDIENTE]  = por investigar
+
+
+---------------------------------------------------------------------
+1. NORMAS DEL PROYECTO
+---------------------------------------------------------------------
+- NO subir al repositorio (ni siquiera privado) archivos del juego:
+  ISO, EBOOT.BIN, imágenes, audio, vídeos ni el proyecto de Ghidra
+  (el proyecto de Ghidra lleva el ejecutable dentro).
+- SÍ se pueden compartir: estas notas, listas de funciones con su
+  dirección y lo que hacen, estructuras de datos, código propio.
+- Cada colaborador saca los archivos de su propia copia del juego.
+- La traducción se distribuye como parche (xdelta), no como ISO.
+
+
+---------------------------------------------------------------------
+2. CONTENIDO DEL ISO
+---------------------------------------------------------------------
+Raíz:
+  UMD_DATA.BIN            48 bytes   Identificador del disco. Ignorar.
+  PSP_GAME/               (fecha 2013 -> modificado por la traducción)
+
+PSP_GAME/
+  ICON0.PNG, PIC0.PNG, PIC1.PNG     Iconos y fondos del menú del PSP
+  PARAM.SFO                         Información del juego (fecha 2012)
+
+PSP_GAME/SYSDIR/
+  EBOOT.BIN     2 MB      Ejecutable principal. Fecha 2016.
+                          [CONFIRMADO] Modificado por los traductores.
+                          [CONFIRMADO] DESENCRIPTADO (empieza por 7F 45 4C 46 = ELF).
+  BOOT.BIN      1 MB      Lleno de ceros. No sirve. Ignorar.
+  OPNSSMP.BIN   880 bytes Módulo pequeño de arranque. Ignorar.
+  UPDATE/       Archivos de 0 bytes (vaciados). Ignorar.
+
+PSP_GAME/INSDIR/
+  UMDIMAGE.DAT  0 bytes   Vaciado. Ignorar.
+
+PSP_GAME/USRDIR/   (aprox. 1 GB en total)
+  bgm.pak             47 MB   Música
+  libpsmfplayer.prx   26 KB   Librería de Sony para vídeos (no es del juego)
+  movie_XX.pmf                Vídeos. Los de fecha 2015 pesan mucho más
+                              (23-33 MB) que los originales (3-4 MB).
+                              [PROBABLE] Re-codificados con subtítulos en español.
+  psmf.prx            7 KB    Módulo de Sony para vídeo (no es del juego)
+  umdimage.dat        393 MB  Contenedor principal. Fecha 2016 (traducción).
+  umdimage2.dat       213 MB  Segundo contenedor. Fecha 2016 (traducción).
+  voice.pak           198 MB  [PROBABLE] Voces. Fecha 2013.
+
+  CABECERA DE umdimage.dat (visto en HxD):
+    0x0000  0B 10 00 00  -> 0x100B = 4107  = número de archivos
+    0x0004  30 40 00 00  -> 0x4030         = posición del archivo 0
+    0x0008  F0 4A 00 00  -> 0x4AF0         = posición del archivo 1
+    0x000C  B0 51 00 00  -> 0x51B0         = posición del archivo 2
+    0x0010  10 58 00 00  -> 0x5810         ...
+    0x0014  30 80 00 00  -> 0x8030
+    0x0018  80 91 00 00  -> 0x9180
+    0x001C  30 0D 01 00  -> 0x10D30
+  [CONFIRMADO] Formato: { número de archivos ; lista de posiciones }.
+    Comprobación: 4 bytes + 4107 x 4 bytes = 16432 = 0x4030, que es
+    justo donde empieza el primer archivo.
+  [CONFIRMADO] Los archivos NO tienen nombre dentro del contenedor.
+    Los nombres están en el EBOOT (por eso hace falta la tabla del EBOOT).
+  [PROBABLE] Es el mismo formato PAK que maneja pak_archiver.
+
+  Primeras posiciones de la cabecera (archivo nº -> posición):
+    0 0x4030 | 1 0x4AF0 | 2 0x51B0 | 3 0x5810 | 4 0x8030 | 5 0x9180
+    6 0x10D30 | 7 0x12B40 | 8 0x1EC50 | 9 0x20910 | 10 0x21120
+    11 0x21510 | 12 0x28060 | 13 0x286B0 | 14 0x2A820
+  Para saber en qué archivo cae una posición: buscar la mayor posición
+  de la cabecera que sea menor o igual.
+
+  FORMATO DEL TEXTO DEL JUEGO
+  [CONFIRMADO] Texto en UTF-16 little-endian (cada letra = 2 bytes,
+    p. ej. "d" = 64 00). Visto en HxD buscando "disparo".
+  [CONFIRMADO] Cada frase empieza por FF FE (marca BOM de UTF-16) y
+    termina en 00 00. Salto de línea = 0A 00.
+  [PROBABLE] Mismo formato de texto que la versión de PC.
+
+  ARCHIVO 13 de umdimage.dat (0x286B0 - 0x2A820, 8.560 bytes)
+    [CONFIRMADO] Contiene las descripciones de las HABILIDADES.
+    Ejemplo (en 0x2912x): "Aumenta la velocidad de disparo de munición.
+    Efectivo durante el Debate Continuo y la batalla final del Duelo de
+    Fuego Cruzado. (PH requeridos: 3)"
+    Nombres usados por la traducción:
+      Debate Continuo        = debate de los juicios (bin_giron)
+      Epifanía Anagrámica    = minijuego de letras (bin_anagram)
+      Duelo de Fuego Cruzado = minijuego de ritmo (bin_mtb)
+      PH                     = puntos de habilidad
+    Encontrado en la tabla del EBOOT (Ghidra, Search -> Memory):
+      0x000fc0d8  60 80 02 00 -> 0x28060 posición del archivo 12
+      0x000fc0dc  50 06 00 00 -> 0x650   tamaño del archivo 12
+      0x000fc0e0  58 8b 0e 00 -> 0xe8b58 puntero al NOMBRE del archivo 13
+      0x000fc0e4  b0 86 02 00 -> 0x286B0 posición del archivo 13
+      0x000fc0e8  68 21 00 00 -> 0x2168  tamaño del archivo 13 (8.552)
+      0x000fc0ec  6c 8b 0e 00 -> 0xe8b6c puntero al nombre del archivo 14
+    [CONFIRMADO] El tamaño del archivo 12 (0x650) cuadra exactamente
+      con la cabecera de umdimage.dat (0x286B0 - 0x28060 = 0x650).
+    [CONFIRMADO] Los archivos dentro de umdimage.dat se alinean a 16
+      bytes: el archivo 13 mide 0x2168 pero ocupa 0x2170 (8 bytes de relleno).
+    [CONFIRMADO] Esta zona de la tabla sigue el mismo orden que la
+      cabecera de umdimage.dat (archivo 12, 13, 14...).
+    [CONFIRMADO] Nombre en 0xe8b58: "13_skilldesc.pak"
+      (skill desc = descripción de habilidades). La deducción era correcta.
+
+  NOMBRES DE ARCHIVOS NUMERADOS (zona 0xe8b0c - 0xe8b8c del EBOOT)
+    [CONFIRMADO] Los primeros archivos de umdimage.dat llevan su número
+    delante del nombre: "13_..." es el archivo 13 del contenedor.
+    [CONFIRMADO] Lista completa (EBOOT, 0xe8a5c - 0xe8c9c):
+      00_system.pak            Textos del sistema
+      01_contents.pak          [PROBABLE] Menú de extras/contenidos
+      02_bgmname.pak           Nombres de las músicas
+      03_eventname.pak         Nombres de eventos
+      04_itemname.pak          Nombres de objetos (regalos)
+      05_itemdescription.pak   Descripciones de objetos
+      06_kotodamaname.pak      Nombres de las Balas de la Verdad
+      07_kotodamadesc1.pak     Descripciones de las Balas (1)
+      08_kotodamadesc2.pak     Descripciones de las Balas (2)
+      09_kotodamadesc3.pak     Descripciones de las Balas (3)
+      10_special.pak
+      11_report.pak            [PROBABLE] Informes de Monokuma
+      12_skillname.pak         Nombres de habilidades (1.616 bytes)
+      13_skilldesc.pak         Descripciones de habilidades [CONFIRMADO]
+      14_rule.pak              [PROBABLE] Reglas del colegio
+      15_operatemode.pak       [PROBABLE] Modos de control
+      16_operatedesc.pak       [PROBABLE] Descripción de los controles
+      17_floorname.pak         Nombres de plantas
+      18_mapname.pak           Nombres de lugares del mapa
+      19_handbookmenu.pak      Menú del Manual Electrónico
+      20_handbookdesc.pak      Descripciones del Manual Electrónico
+      21_briefing.pak          [PROBABLE] Resúmenes antes de los juicios
+      22_profile.pak           Perfiles de los personajes
+      23_anagram.pak           ¡¡TEXTO DEL MINIJUEGO DE LETRAS!!
+                               Tabla del EBOOT en 0x000fc158:
+                                 nombre   0xe8c0c
+                                 posición 0x30500 en umdimage.dat
+                                 tamaño   0x8F8 (2.296 bytes)
+                               (El archivo 22 está en 0x2FE00, tamaño
+                               0x6F8 + 8 de relleno = 0x30500. Cuadra.)
+                               [CONFIRMADO] Justo antes (archivo 22,
+                               22_profile.pak) se ven nombres de
+                               personajes, pesos en kg, etc.
+                               Cabecera: 58 00 00 00 -> 88 textos.
+                               Primer texto en +0x170 (0x30670).
+                               [CONFIRMADO] Las letras son de ANCHO
+                               COMPLETO (fullwidth) en UTF-16:
+                                 FF21 = A, FF22 = B, ... FF3A = Z
+                                 (en el archivo: 21 FF, 22 FF, ...)
+                               Ej.: 22 FF 2C FF 35 FF 25 FF = B L U E...
+                               [CONFIRMADO] Decodificados los 88 textos.
+
+      CONTENIDO DE 23_anagram.pak (88 textos, en parejas)
+        [CONFIRMADO] Todo en letras de ancho completo (A-Z = FF21-FF3A,
+          1-9 = FF11-FF19, espacio = 3000), SALVO la Ó de RETRANSMISIÓN,
+          que es una Ó normal (0x00D3): no existe Ó de ancho completo.
+          [PENDIENTE] Ver si la traducción tuvo que tocar el código o la
+          fuente para que la Ó funcione en el minijuego.
+        [CONFIRMADO] Longitud máxima: 15 letras (BOTEDEPROTEINAS,
+          MOTHERGRANDPAMA, YAMAKUWATOGAHAI). Posible límite del juego.
+        [PROBABLE] Van en parejas: primera = respuesta correcta,
+          segunda = palabras "trampa" (a menudo varias pegadas, p. ej.
+          CATPIGBIRD = CAT+PIG+BIRD) cuyas letras sirven de señuelo.
+        [CONFIRMADO] Traducción incompleta: solo algunas palabras están
+          en español (PELO, DUALIDAD, RELOJ, FICHADEAJEDREZ,
+          BOTEDEPROTEINAS, LOBO, AMNESIA, CAMBIO, RETRANSMISIÓN).
+          A partir de la 20 todo sigue en inglés.
+        [PROBABLE] De la 20 en adelante parecen preguntas sobre los
+          personajes (SWIMMER, DONUTS, ROMANCE NOVEL, KARATE...).
+          [PENDIENTE] Averiguar en qué parte del juego se usan.
+
+        Nº     Primera           | Segunda
+         0/ 1  BLUEDUSTPAN       | REDBROOM
+         2/ 3  PELO              | SHIN
+         4/ 5  TPM               | DUALIDAD
+         6/ 7  RELOJ             | CLOCK
+         8/ 9  FICHADEAJEDREZ    | SHOGIPIECE
+        10/11  BOTEDEPROTEINAS   | VITAMINBOTTLE
+        12/13  LOBO              | HYENA
+        14/15  AMNESIA           | LOSTGIRAFFE
+        16/17  CAMBIO            | STANDIN
+        18/19  RETRANSMISIÓN     | HIGHPOWEREDMIC
+        20/21  HAGAKURE          | MAIZONONAEGI
+        22/23  FRIENDS           | MABINOGI
+        24/25  HARDHAT           | FIREPHOTO
+        26/27  INDIA             | AMERICA
+        28/29  DAYTRADING        | OMBUDSMAN
+        30/31  55MILLION         | 12346789B
+        32/33  MUFFLER           | TOILET
+        34/35  FISTFIGHT         | KARATE
+        36/37  DOGS              | CATPIGBIRD
+        38/39  PUNK              | POPTECHNOMETAL
+        40/41  CIRCLE            | SQUARE
+        42/43  ALL GENRES        | NONELIGHTHEAVY
+        44/45  HERETICAL         | MAGICFIST
+        46/47  TAROT             | CUPKAKA
+        48/49  CRYPTID           | FAMILYGENUS
+        50/51  NAZCA             | PARACAS
+        52/53  CRANE             | SPARROWCROW
+        54/55  SWIMMER           | MEATCOOLER
+        56/57  GLOVES            | SCARFSOCKS
+        58/59  DRY TOWEL         | YOGA
+        60/61  SWIM TEAM         | BASEBALLTRACK
+        62/63  DONUTS            | CAKEBREAD
+        64/65  ROMANCE NOVEL     | HORRORMYSTERY
+        66/67  FILM              | THEATRE
+        68/69  I NOVEL           | ROMANCEMYSTERY
+        70/71  POSITIVE          | NEGATIVEDOUBLE
+        72/73  MMA               | MUAYTHAI
+        74/75  FATHER            | MOTHERGRANDPAMA
+        76/77  HAMMER            | DRILL
+        78/79  UTSUNOMIYA        | HOKURIKANTO
+        80/81  KARAOKE           | STREPTOMYCIN
+        82/83  SPEECH TO TEXT    | SYNTHESIZER
+        84/85  AI                | REALDUMB
+        86/87  OOWADA            | YAMAKUWATOGAHAI
+
+      24_moviename.pak         Nombres de los vídeos
+      25_skilldeschb.pak       [PROBABLE] Descripción de habilidades (otra)
+      26_menu.pak              Menús
+      27_artworkname.pak       Nombres de ilustraciones (galería)
+      28_credit.pak            Créditos
+      29_operatemoder.pak      [PENDIENTE] Variantes con "r" al final de
+      30_operatedescr.pak        15, 16 y del sistema. ¿Otra versión de
+      31_operatesysr.pak         los controles?
+    Justo después empiezan los scripts: e00_000_000.lin (0xe8cb0)...
+
+    OTRA LISTA DE NOMBRES (zona 0xe4cf4 - 0xe4d9c...), por orden alfabético:
+      adv_camera_arrow_right.pak, adv_camera_arrow_up.pak,
+      adv_forbidden.pak, adv_message_window.pak,
+      anagram_countdown.pak (0xe4d54), anagram_letter_pl.pak (0xe4d6c),
+      button_design_icn.pak, button_design_icn_g.pak...
+    [CONFIRMADO] Ghidra no muestra XREF en estos nombres.
+    [PROBABLE] Se usan a través de una tabla que Ghidra no ha reconocido
+      como punteros (igual que pasó con 13_skilldesc.pak).
+    [PENDIENTE] ¿A qué contenedor pertenecen? ¿umdimage2.dat?
+
+    ARCHIVOS anagram_XX.dat (zona 0xe7a80 en adelante, orden alfabético)
+      Justo antes: stand_trial06.pak, stand_trial07.pak,
+      stand_trial10.pak, stand_trial99.pak
+      0xe7a80 anagram_01.dat
+      0xe7a90 anagram_101.dat
+      0xe7aa0 anagram_11.dat
+      0xe7ab0 anagram_200.dat
+      ... (siguen hasta al menos 0xe7b70)
+    [CONFIRMADO] Sin XREF en Ghidra.
+    [PROBABLE] Un archivo de datos por cada vez que aparece el minijuego.
+      Podrían indicar qué palabra de 23_anagram.pak se usa en cada caso.
+    Tabla encontrada (Search -> Memory "80 7a 0e 00"):
+      0x000fb3c0  6c 7a 0e 00 -> 0xe7a6c    nombre "stand_trial99.pak"
+      0x000fb3c4  10 1a bf 17 -> 0x17BF1A10 posición (~380 MB)
+      0x000fb3c8  70 30 2b 00 -> 0x2B3070   tamaño (~2,7 MB)
+      0x000fb3cc  80 7a 0e 00 -> 0xe7a80    nombre "anagram_01.dat"
+      0x000fb3d0  10 de 0e 00 -> 0xEDE10    posición
+      0x000fb3d4  58 00 00 00 -> 0x58       tamaño (88 bytes)
+    [CONFIRMADO] Mismo formato de 12 bytes { nombre ; posición ; tamaño }.
+    [CONFIRMADO] stand_trial99.pak está en umdimage.dat (su posición,
+      ~380 MB, no cabe en umdimage2.dat, que mide 213 MB).
+    [PROBABLE] La lista alfabética vuelve a empezar en anagram_01.dat
+      (de "stand..." a "anagram..."), así que aquí empieza otro grupo de
+      archivos, quizá de umdimage2.dat.
+    [CONFIRMADO] anagram_01.dat está en umdimage.dat (NO en umdimage2.dat):
+      su posición aparece en la cabecera, en 0xC4 -> archivo nº 48
+      ((0xC4 - 4) / 4 = 48).
+      Cabecera alrededor: archivo 47 en 0xD6720, 48 en 0xEDE10,
+      49 en 0xEDE70, 50 en 0xEDEC0... (muchos archivos pequeños seguidos)
+      [CORRECCIÓN] Así que no todo lo que hay a partir del 32 son .lin.
+      Ocupa 0x60 (88 bytes + 8 de relleno).
+      Justo antes: final de una imagen "adv_message_speak_pl_002.png".
+    Primeros bytes de anagram_01.dat (en 0xEDE10):
+      B4 00 0B 00 D0 07 00 00 01 00 00 00 01 00 06 00
+      07 00 0C 00 0D 00 00 00 ...
+      Leído como números de 2 bytes: 180, 11, 2000, 0, 1, 0, 1, 6, 7,
+      12, 13, 0...
+      [CORRECCIÓN] La pista de 6/7 y 12/13 era falsa: esos números se
+        repiten igual en varios archivos, así que no son palabras.
+
+    ¡¡FORMATO DE LOS anagram_XX.dat DESCIFRADO (primeros campos)!!
+    Archivos seguidos en umdimage.dat, números de 2 bytes:
+      Pos.     c1   c2  c3    c4  c5  | resto
+      EDE10    180  11  2000  0   1   | 0 1 6 7 12 13
+      EDE70    180   8  2000  20  21  | 0 1 6 7 12 13
+      EDEC0    180   4  2000  2   3   | 0 1 24 7 6 31 1 0 1 1 0 1 ...
+      EDEF0    180   7  2000  22  23  | 0 1 6 7 12 13
+      EDF30    180   7  2000  24  25  | 0 1 6 7 12 13
+      EDF70    180   5  2000  26  27  | 0 1 6 7 12 13
+      EDFB0    180  10  2000  28  29  | 0 1 6 7 12 13
+    [CONFIRMADO] c4 / c5 = números de la pareja en 23_anagram.pak
+      (respuesta / señuelos):
+        0/1   BLUEDUSTPAN / REDBROOM
+        20/21 HAGAKURE / MAIZONONAEGI
+        2/3   PELO / SHIN
+        22/23 FRIENDS / MABINOGI
+        24/25 HARDHAT / FIREPHOTO
+        26/27 INDIA / AMERICA
+        28/29 DAYTRADING / OMBUDSMAN
+    [CONFIRMADO] c2 = NÚMERO DE LETRAS DE LA RESPUESTA (casillas):
+        BLUEDUSTPAN 11, HAGAKURE 8, PELO 4, FRIENDS 7, HARDHAT 7,
+        INDIA 5, DAYTRADING 10. Coincide en los 7 casos.
+      ==> Esto es lo que los traductores tuvieron que cambiar al poner
+          palabras en español: el nº de casillas está guardado aparte
+          en cada .dat, no se calcula a partir de la palabra.
+          (PELO = 4 está bien actualizado.)
+    [PROBABLE] c1 = 180 y c3 = 2000: tiempo/puntuación (constantes).
+    [PENDIENTE] Qué significa el resto (0 1 6 7 12 13...). ¿Entradas
+      de la tabla de configuración de bin_anagram.pak (archivo 12)?
+    [CONFIRMADO] Nombre de cada partida (tabla del EBOOT desde 0xfb3cc,
+      cruzada con los nombres desde 0xe7a80):
+      Patrón: anagram_XY.dat -> X = capítulo, Y = número de partida.
+        anagram_11.dat  PELO              capítulo 1
+        anagram_21.dat  TPM               capítulo 2
+        anagram_31.dat  RELOJ             capítulo 3
+        anagram_41.dat  FICHADEAJEDREZ    capítulo 4 (1ª)
+        anagram_42.dat  BOTEDEPROTEINAS   capítulo 4 (2ª)
+        anagram_51.dat  LOBO              capítulo 5 (1ª)
+        anagram_52.dat  FISTFIGHT         capítulo 5 (2ª) ¡¡EN INGLÉS!!
+                        tiempo 300 (no 180) y cola distinta (0 3 1 4).
+                        [PENDIENTE] ¿Sale en el juego sin traducir, o
+                        es una partida especial/sin usar? Comprobar.
+        anagram_61.dat  AMNESIA           capítulo 6 (1ª)
+        anagram_62.dat  CAMBIO            capítulo 6 (2ª)
+        anagram_63.dat  RETRANSMISIÓN     capítulo 6 (3ª)
+        anagram_81.dat  (solo 6 bytes: 180, 4, 2000) [PROBABLE] Vacío/sin usar
+        anagram_01.dat  BLUEDUSTPAN       [PROBABLE] prueba o sin usar
+        anagram_101.dat HAGAKURE          [PENDIENTE] ¿modo especial?
+        anagram_200.dat ... anagram_232.dat  33 "de preguntas"
+                        (FRIENDS ... OOWADA). [PROBABLE] Modo extra.
+      Tamaños exactos (según el EBOOT) en la tabla de abajo; el hueco
+      en umdimage.dat es mayor por el relleno a 16 bytes.
+
+    [CONFIRMADO] Justo después en la tabla: bin_anagram_l.pak
+      (archivo 294, posición 0x024C74B0, tamaño 0xA4B0). Es justo el
+      hueco que había tras bin_anagram.pak (que acaba en 0x024C74B0).
+      Le siguen bin_art_gallery_l.pak (archivo 295) y otros.
+    [CONFIRMADO] bin_anagram.pak sería entonces el archivo 293.
+
+    TABLA COMPLETA (archivos 48 a 92 de umdimage.dat, analizados con
+    un programa a partir de cabecera.bin y anagram_dats.bin):
+      Nº   posición  tiempo casillas  pareja  respuesta      (letras)
+   48  0xede10   t=180 casillas=11   0/ 1  BLUEDUSTPAN      (11) OK            c6/c7=0/1 
+   49  0xede70   t=180 casillas= 8  20/21  HAGAKURE         ( 8) OK            c6/c7=0/1 
+   50  0xedec0   t=180 casillas= 4   2/ 3  PELO             ( 4) OK            c6/c7=0/1 
+   51  0xedef0   t=180 casillas= 7  22/23  FRIENDS          ( 7) OK            c6/c7=0/1 
+   52  0xedf30   t=180 casillas= 7  24/25  HARDHAT          ( 7) OK            c6/c7=0/1 
+   53  0xedf70   t=180 casillas= 5  26/27  INDIA            ( 5) OK            c6/c7=0/1 
+   54  0xedfb0   t=180 casillas=10  28/29  DAYTRADING       (10) OK            c6/c7=0/1 
+   55  0xee010   t=180 casillas= 9  30/31  55MILLION        ( 9) OK            c6/c7=0/1 
+   56  0xee060   t=180 casillas= 7  32/33  MUFFLER          ( 7) OK            c6/c7=0/1 
+   57  0xee0a0   t=180 casillas= 9  34/35  FISTFIGHT        ( 9) OK            c6/c7=0/1 
+   58  0xee0f0   t=180 casillas= 4  36/37  DOGS             ( 4) OK            c6/c7=0/1 
+   59  0xee120   t=180 casillas= 4  38/39  PUNK             ( 4) OK            c6/c7=0/1 
+   60  0xee150   t=180 casillas= 6  40/41  CIRCLE           ( 6) OK            c6/c7=0/1 
+   61  0xee190   t=180 casillas= 3   4/ 5  TPM              ( 3) OK            c6/c7=1/2 HISTORIA
+   62  0xee1c0   t=180 casillas=10  42/43  ALL GENRES       (10) OK            c6/c7=0/1 
+   63  0xee220   t=180 casillas= 9  44/45  HERETICAL        ( 9) OK            c6/c7=0/1 
+   64  0xee270   t=180 casillas= 5  46/47  TAROT            ( 5) OK            c6/c7=0/1 
+   65  0xee2b0   t=180 casillas= 7  48/49  CRYPTID          ( 7) OK            c6/c7=0/1 
+   66  0xee2f0   t=180 casillas= 5  50/51  NAZCA            ( 5) OK            c6/c7=0/1 
+   67  0xee330   t=180 casillas= 5  52/53  CRANE            ( 5) OK            c6/c7=0/1 
+   68  0xee370   t=180 casillas= 7  54/55  SWIMMER          ( 7) OK            c6/c7=0/1 
+   69  0xee3b0   t=180 casillas= 6  56/57  GLOVES           ( 6) OK            c6/c7=0/1 
+   70  0xee3f0   t=180 casillas= 9  58/59  DRY TOWEL        ( 9) OK            c6/c7=0/1 
+   71  0xee440   t=180 casillas= 9  60/61  SWIM TEAM        ( 9) OK            c6/c7=0/1 
+   72  0xee490   t=180 casillas= 6  62/63  DONUTS           ( 6) OK            c6/c7=0/1 
+   73  0xee4d0   t=180 casillas=13  64/65  ROMANCE NOVEL    (13) OK            c6/c7=0/1 
+   74  0xee540   t=180 casillas= 4  66/67  FILM             ( 4) OK            c6/c7=0/1 
+   75  0xee570   t=180 casillas= 7  68/69  I NOVEL          ( 7) OK            c6/c7=0/1 
+   76  0xee5b0   t=180 casillas= 8  70/71  POSITIVE         ( 8) OK            c6/c7=0/1 
+   77  0xee600   t=180 casillas= 3  72/73  MMA              ( 3) OK            c6/c7=0/1 
+   78  0xee630   t=180 casillas= 6  74/75  FATHER           ( 6) OK            c6/c7=0/1 
+   79  0xee670   t=180 casillas= 6  76/77  HAMMER           ( 6) OK            c6/c7=0/1 
+   80  0xee6b0   t=180 casillas=10  78/79  UTSUNOMIYA       (10) OK            c6/c7=0/1 
+   81  0xee710   t=180 casillas= 7  80/81  KARAOKE          ( 7) OK            c6/c7=0/1 
+   82  0xee750   t=180 casillas=14  82/83  SPEECH TO TEXT   (14) OK            c6/c7=0/1 
+   83  0xee7c0   t=180 casillas= 2  84/85  AI               ( 2) OK            c6/c7=0/1 
+   84  0xee7f0   t=180 casillas= 6  86/87  OOWADA           ( 6) OK            c6/c7=0/1 
+   85  0xee830   t=180 casillas= 5   6/ 7  RELOJ            ( 5) OK            c6/c7=1/2 HISTORIA
+   86  0xee870   t=180 casillas=14   8/ 9  FICHADEAJEDREZ   (14) OK            c6/c7=2/3 HISTORIA
+   87  0xee8e0   t=180 casillas=15  10/11  BOTEDEPROTEINAS  (15) OK            c6/c7=2/3 HISTORIA
+   88  0xee950   t=180 casillas= 4  12/13  LOBO             ( 4) OK            c6/c7=2/3 HISTORIA
+   89  0xee980   t=300 casillas= 9  34/35  FISTFIGHT        ( 9) OK            c6/c7=0/3 HISTORIA
+   90  0xee9c0   t=180 casillas= 7  14/15  AMNESIA          ( 7) OK            c6/c7=3/4 HISTORIA
+   91  0xeea00   t=180 casillas= 6  16/17  CAMBIO           ( 6) OK            c6/c7=3/4 HISTORIA
+   92  0xeea40   t=180 casillas=13  18/19  RETRANSMISIÓN    (13) OK            c6/c7=3/4 HISTORIA
+
+    [CONFIRMADO] En los 45 archivos, el nº de casillas coincide con las
+      letras de la respuesta. Los espacios cuentan como casilla
+      ("ALL GENRES" = 10, "SPEECH TO TEXT" = 14).
+    [CONFIRMADO] La traducción actualizó bien las casillas de todas las
+      palabras en español.
+    [CONFIRMADO] Hay dos tipos de archivo:
+      a) 9 "de historia": PELO, TPM, RELOJ, FICHADEAJEDREZ,
+         BOTEDEPROTEINAS, LOBO, AMNESIA, CAMBIO, RETRANSMISIÓN.
+         Todas traducidas. Tienen una cola larga de números y de
+         interruptores 0/1 (campos c6 en adelante).
+         c6/c7 suben poco a poco: 0/1, 1/2, 2/3, 3/4 (como la columna
+         c5/c6 de la tabla de configuración de bin_anagram.pak).
+      b) 35 "de preguntas" (palabras 20-87 + BLUEDUSTPAN): todos con
+         la misma cola 0 1 6 7 12 13. Sin traducir.
+         [PROBABLE] No salen en la historia principal; quizá un modo
+         extra o contenido sin usar. Explicaría que no se tradujeran.
+      Caso especial: archivo 89 = FISTFIGHT con tiempo 300 (no 180) y
+      cola distinta (0 3 1 4).
+    [PENDIENTE] Significado de la cola (c6 en adelante) y de los 0/1.
+    Archivo 93 = anagram_81.dat, solo 6 bytes (ver arriba).
+
+    TABLA DE ARCHIVOS DE umdimage.dat EN EL EBOOT
+    Entradas de 12 bytes { nombre ; posición ; tamaño }, en el mismo
+    orden que el contenedor:
+      archivo 13 -> 0x000fc0e0
+      archivo 23 -> 0x000fc158   (0xfc0e0 + 10 x 12 = 0xfc158, cuadra)
+    [PROBABLE] Archivo 0 (00_system.pak) -> 0xfc158 - 23 x 12 = 0x000fc044
+    [PENDIENTE] Comprobarlo y buscar qué código usa esta tabla.
+    [PROBABLE] Archivos 0-31 de umdimage.dat = tablas de texto;
+    a partir del 32 = scripts .lin.
+  [PENDIENTE] Mirar la cabecera de umdimage2.dat.
+
+
+---------------------------------------------------------------------
+3. DATOS TÉCNICOS DEL EBOOT.BIN
+---------------------------------------------------------------------
+Cabecera (visto en HxD):
+  7F 45 4C 46   = ELF (desencriptado)
+  01 01 01      = 32 bits, little-endian, versión 1
+  A0 FF         = tipo 0xFFA0 = PRX de PSP (ejecutable reubicable)
+  08 00         = procesador MIPS (Allegrex en el PSP)
+
+En Ghidra:
+  segment_0 (código): 0x00000000 - 0x00109623  (algo más de 1 MB)
+  Ghidra lo carga empezando en 0x0.
+  [PENDIENTE] En PPSSPP se carga normalmente en 0x08804000; habrá que
+  ajustar la dirección base cuando usemos el depurador de PPSSPP.
+
+Textos encontrados (Defined Strings): 3782 en total.
+
+
+---------------------------------------------------------------------
+4. CONFIGURACIÓN DE HERRAMIENTAS
+---------------------------------------------------------------------
+- Ghidra 11.1.2 (ghidra_11.1.2_PUBLIC)
+- Extensión ghidra-allegrex (kotcrab), archivo:
+    ghidra_11.1.2_PUBLIC_20241103_ghidra-allegrex.zip
+  Se instala con File -> Install Extensions (sin descomprimir) y
+  reiniciando Ghidra.
+- Importación del EBOOT.BIN:
+    Format:   PSP Executable (ELF)
+    Language: Allegrex:LE:32:default:default
+- Análisis automático con las opciones por defecto.
+- Proyecto de Ghidra: "DANGANRONPA PSP"
+- HxD: editor hexadecimal para mirar archivos por dentro.
+- UMDGen: para abrir el ISO y extraer archivos.
+
+Herramientas de la comunidad (pensadas para la versión de PC):
+- github.com/vn-tools/danganronpa-tools  (archivado desde 2022)
+    lin_compiler : compila/descompila scripts .lin
+    pak_archiver : empaqueta/desempaqueta .pak
+    wad_archiver : empaqueta/desempaqueta .wad (formato de PC)
+- github.com/Visual-Novel-Decompilation-Project/drpakmapgen
+    Genera los mapeos de los PAK leyendo el ejecutable de PC.
+[PENDIENTE] Comprobar si funcionan con los archivos de la versión PSP.
+
+
+---------------------------------------------------------------------
+5. LIBRERÍAS DE SONY QUE USA EL JUEGO (lo que habría que sustituir en PS2)
+---------------------------------------------------------------------
+Equivalencias de PS2 aproximadas, a validar por quien haga el port.
+
+  sceGe_user          Chip gráfico del PSP (todo el dibujo, incluido el 3D)
+                      -> PS2: Graphics Synthesizer (p. ej. con gsKit)
+  sceDisplay          Gestión de la pantalla
+                      -> PS2: gsKit / configuración de vídeo
+  sceCtrl             Botones
+                      -> PS2: libpad
+  sceAudio            Salida de audio
+  sceSasCore          Mezclador de sonido
+  sceAtrac3plus       Formato de audio ATRAC3plus de Sony
+                      -> PS2: convertir audio a otro formato (p. ej. con audsrv)
+  sceMpeg             Decodificación de vídeo
+  scePsmfPlayer       Reproductor de vídeos .pmf
+                      -> PS2: re-codificar vídeos (la PS2 tiene hardware MPEG-2)
+  IoFileMgrForUser    Lectura de archivos
+                      -> PS2: fileXio o similar
+  sceUtility          [PROBABLE] Pantallas de guardado
+                      -> PS2: tarjeta de memoria (libmc)
+  sceUmdUser          Acceso al disco UMD
+  scePower            Gestión de energía (en PS2 probablemente no hace falta)
+  sceImpose           Volumen/brillo del sistema (probablemente no hace falta)
+  Kernel_Library, LoadExecForUser, ModuleMgrForUser, StdioForUser,
+  SysMemUserForUser, ThreadManForUser
+                      Funciones básicas del sistema (memoria, hilos, módulos)
+
+Nota de la resolución: PSP 480x272, PS2 normalmente 640x448.
+La interfaz habría que reajustarla.
+
+
+---------------------------------------------------------------------
+6. ARCHIVOS DE DATOS QUE MENCIONA EL EBOOT
+---------------------------------------------------------------------
+Contenedores principales:
+  umdimage.dat    (texto en 0x000ef1d0)
+  umdimage2.dat   (texto en 0x000ef204)
+  [PROBABLE] El EBOOT guarda la lista de nombres de archivo y funciona
+  como índice para encontrar cada archivo dentro de los umdimage.
+  (Parecido a lo que hace drpakmapgen con el ejecutable de PC.)
+
+Scripts de la historia (.lin): 618 referencias
+  Patrón: eXX_YYY_...lin
+  [PROBABLE] e00 = prólogo, e01 = capítulo 1, etc.
+  Mismo tipo de archivo que maneja lin_compiler.
+
+Archivos .pak: 433 referencias, entre ellos:
+  bg_XXX.pak          Fondos
+  se_adv...pak        Efectos de sonido: exploración (adventure)
+  se_chapter...pak    Efectos de sonido: por capítulo
+  se_climax...pak     Efectos de sonido: reconstrucción final del caso
+  se_system...pak     Efectos de sonido: sistema/menús
+  se_trial...pak      Efectos de sonido: juicios
+  font.pak            Fuente de letras
+                      [PROBABLE] Modificada para ñ y acentos
+  bin_anagram.pak     (texto en 0x000df0e8)
+                      MINIJUEGO DE LAS LETRAS (el de "D I S P A R O")
+                      En japonés: "anagrama de inspiración"
+                      [CONFIRMADO] Solo 1 referencia: un puntero (dato, no
+                      código) en 0x000f5978 (PTR_s_bin_anagram...).
+                      [PROBABLE] Forma parte de una tabla de punteros a
+                      nombres de archivo que el código recorre por número.
+
+      TABLA EN 0x000f5978 (bytes en little-endian):
+        0x000f5978  e8 f0 0d 00  -> 0x000df0e8 = "bin_anagram.pak"
+        0x000f597c  10 5b 40 02  -> 0x02405b10 (37.772.048)
+        0x000f5980  a0 19 0c 00  -> 0x000c19a0 (792.992, ~774 KB)
+        0x000f5984  f8 f0 0d 00  -> 0x000df0f8 = "bin_giron.pak"
+        0x000f5988  90 c6 66 02  -> 0x0266c690
+        0x000f598c  e8 2c 10 00  -> 0x00102ce8 (1.059.048, ~1 MB)
+        0x000f5990  08 f1 0d 00  -> 0x000df108 = "bin_hannin.pak"
+        0x000f5994  70 c6 77 02  -> 0x0277c670
+        0x000f5998  18 7d 01 00  -> 0x00017d18 (97.560, ~95 KB)
+        0x000f599c  18 f1 0d 00  -> 0x000df118 = "bin_mtb.pak"
+
+      [CONFIRMADO] Cada entrada mide 12 bytes y empieza con un puntero
+      al nombre del archivo (el patrón se repite cada 12 bytes).
+      [PROBABLE] Los otros dos campos son { posición ; tamaño }:
+        - Las posiciones van siempre en aumento y no se solapan:
+            anagram  0x02405b10 - 0x024c74b0
+            giron    0x0266c690 - 0x0276f378
+            hannin   0x0277c670 - 0x02794388
+        - NO son contiguas: hay huecos entre archivos (1,7 MB entre
+          anagram y giron; 53 KB entre giron y hannin).
+          [PROBABLE] Ahí hay otros archivos que no están en esta tabla
+          (quizá en otra tabla distinta).
+      [CONFIRMADO] Comprobado en HxD: en umdimage.dat, posición
+      0x02405b10, empieza un archivo nuevo. Las entradas de la tabla son:
+          { puntero al nombre ; posición en umdimage.dat ; tamaño }
+
+      CONTENIDO DE bin_anagram.pak (en umdimage.dat, 0x02405b10):
+        0D 00 00 00  -> 13 archivos dentro
+        40 00 00 00  -> archivo 0 en +0x40
+        70 96 04 00  -> archivo 1 en +0x49670
+        10 65 06 00  -> archivo 2 en +0x66510
+        00 FB 06 00  -> archivo 3 en +0x6FB00
+        20 46 07 00  -> archivo 4 en +0x74620
+        20 D8 07 00  -> archivo 5 en +0x7D820
+        30 83 08 00  -> archivo 6 en +0x88330
+      [CONFIRMADO] Extraído con HxD a bin_anagram.pak (792.992 bytes).
+      Lista completa de los 13 archivos internos:
+        Nº  Posición   Tamaño (bytes)   Notas
+        0   0x00040    300.592          Otro PAK con 6 archivos dentro
+        1   0x49670    118.432
+        2   0x66510     38.384
+        3   0x6FB00     19.232
+        4   0x74620     37.376
+        5   0x7D820     43.792
+        6   0x88330     37.296
+        7   0x914E0     20.288
+        8   0x96420     12.368
+        9   0x99470      2.304
+        10  0x99D70      7.136
+        11  0x9B950    154.048
+        12  0xC1310      1.680
+      (Tamaño = posición del siguiente - posición actual; el último hasta
+      el final del archivo, 0xC19A0.)
+
+      ARCHIVO 0 (en 0x40) = PAK con 6 archivos:
+        06 00 00 00 -> 6 archivos; posiciones (relativas al archivo 0):
+        0x20, 0xEFC0, 0x17130, 0x1F2A0, 0x27750, 0x2D2C0
+        Su primer archivo (en 0x60 de bin_anagram.pak) empieza por el
+        texto "LLFS" (4C 4C 46 53) seguido de muchos números pequeños.
+        [PENDIENTE] Formato LLFS desconocido. Investigar.
+        [PROBABLE] Datos de disposición de pantalla: aparece 0x1E0 = 480,
+        el ancho de la pantalla del PSP (pista, no prueba).
+      CONTENIDO DE LOS 13 ARCHIVOS (revisado uno a uno en HxD)
+      Truco: cada imagen GIM termina con su nombre original (.png) y la
+      fecha de GimConv. Así, mirando lo que hay JUSTO ANTES de cada
+      posición, sabemos qué imagen cierra el archivo anterior.
+
+      [CONFIRMADO] Los 13 archivos son a su vez PAKs (muñecas rusas).
+      Varios empiezan por un archivo LLFS seguido de imágenes GIM.
+
+        Nº  Posición  Archivos  Contenido / última imagen
+        0   0x00040    6   LLFS + ... ; termina en sanagram_star_ef_000.png
+        1   0x49670   21   termina en anagram_remain_num_016.png
+                           [PROBABLE] números del contador (000-016...)
+        2   0x66510    9   termina en anagram_letter_pl_000.png
+                           (letter_pl = placa/casilla de letra)
+        3   0x6FB00    2   LLFS + sanagram_text_ef_000.png
+        4   0x74620    3   LLFS + ... + anagram_hit_ef_000.png
+                           (efecto al acertar)
+        5   0x7D820    4   termina en ana_hakai_000.png
+                           (hakai = destrucción en japonés)
+        6   0x88330    3   LLFS + ... + ana_suka_001.png
+                           (suka = fallo en japonés)
+        7   0x914E0    4   termina en target_icn_002.png
+        8   0x96420    3   LLFS + ... + time_pl_001.png (tiempo)
+        9   0x99470    1   Una sola imagen GIM: game_title_line_001.png
+                           [CONFIRMADO] empieza por "MIG.00.1PSP" (GIM)
+        10  0x99D70    4   termina en sgiron_gauge_pl_001.png
+                           (medidor; compartido con el debate)
+        11  0x9B950    7   termina en anagram_finish_chara_000.png
+        12  0xC1310   52   ¡52 entradas muy pequeñas! (ver abajo)
+
+      ARCHIVO 12: EL CANDIDATO A "LISTA DE PALABRAS"
+        34 00 00 00 -> 0x34 = 52 entradas
+        Posiciones: 0xE0, 0xFC, 0x118, 0x134, 0x150, 0x16C, 0x188...
+        [CONFIRMADO] Cada entrada mide exactamente 0x1C = 28 bytes.
+        Comprobación: cabecera 4 + 52x4 = 212, redondeado a 0xE0 (224);
+                      224 + 52 x 28 = 1680 bytes = tamaño exacto del archivo.
+        Sus datos empiezan en 0xC1310 + 0xE0 = 0xC13F0 de bin_anagram.pak.
+
+        [CONFIRMADO] NO contiene letras ni palabras. Son solo números.
+        [CONFIRMADO] Cada entrada = 14 números de 2 bytes (14 x 2 = 28).
+        [CONFIRMADO] El primer número es el índice de la entrada (0, 1, 2...).
+        [CONFIRMADO] La última entrada (nº 51, en 0xC1984) empieza por
+        FF FF = -1 -> marca de fin de tabla. O sea, 51 entradas reales.
+
+        Primeras entradas (los 14 números de cada una):
+          Nº  | c1  c2  c3  c4  | c5 c6 | c7 | c8-c13
+          0   | 60  110 220 330 | 1  2  | 40 | 1 0 1 0 0 0
+          1   | 50  100 200 300 | 1  2  | 35 | 1 1 1 0 0 0
+          2   | 45  90  180 270 | 1  2  | 30 | 1 1 1 1 0 0
+          3   | 40  80  160 240 | 1  2  | 25 | 1 1 1 1 1 1
+          4   | 35  70  140 210 | 1  2  | 20 | 0 1 0 1 0 1
+          5   | 30  60  120 180 | 1  2  | 15 | 0 0 0 1 0 1
+          6   | 60  110 220 330 | 2  3  | 40 | 1 0 1 0 0 0
+          7   | 50  100 200 300 | 2  3  | 35 | 1 1 1 0 0 0
+          ...
+          18  | 60  110 220 330 | 4  5  | 40 | ...
+        Patrones:
+          - Van en grupos de 6 que repiten los mismos valores; lo único
+            que cambia entre grupos son c5/c6 (1-2, 2-3, 3-4, 4-5...).
+          - c1-c4 siguen la forma x, 2x, 4x, 6x (salvo la entrada 0).
+          - c7 baja de 5 en 5: 40, 35, 30, 25, 20, 15.
+          - c8-c13 son interruptores (0/1).
+          - Las entradas 42 a 50 rompen el patrón (valores sueltos).
+        [PROBABLE] Es una tabla de configuración/dificultad del minijuego
+        (tiempos, límites, opciones activadas), no la lista de palabras.
+        [PENDIENTE] Averiguar qué significa cada columna (con el
+        depurador de PPSSPP o buscando en Ghidra quién lee esta tabla).
+
+      CONCLUSIÓN: bin_anagram.pak = gráficos + efectos + configuración.
+      Las palabras de las respuestas NO están aquí.
+      [PROBABLE] Están en los scripts .lin de los juicios o en otro archivo.
+      [CONFIRMADO] Es un PAK dentro de otro PAK, con el mismo formato
+      { número de archivos ; lista de posiciones }. La cabecera mide
+      4 + 13x4 = 56 bytes, redondeado a 0x40 (64), que es justo donde
+      empieza el archivo 0.
+
+      JUSTO ANTES (final del archivo anterior, hasta 0x02405b00):
+        Texto: "bgd_200.png ... Sun Oct 17 22:48:13 2010 ... GimConv 1.50"
+        [CONFIRMADO] Las imágenes del juego están en formato GIM, el
+        formato de texturas de Sony para PSP, creado con GimConv 1.50.
+        Para PS2 habrá que convertirlas (existen conversores GIM -> PNG).
+      Justo antes (0x000f5970 = 0xAA, 0x000f5974 = 0xFFFFFFFF) parece
+      el final de otra estructura distinta.
+  bin_giron.pak       (0x000df0f8) "giron" = debate en japonés
+                      [PROBABLE] Debate sin Interrupciones de los juicios
+  bin_hannin.pak      (0x000df108) "hannin" = culpable en japonés
+                      [PROBABLE] Relacionado con señalar/votar al culpable
+  bin_mtb.pak         (0x000df118)
+                      [PROBABLE] El minijuego de ritmo del final de los
+                      juicios (en japonés "Machine-gun Talk Battle")
+
+Textos relacionados con "anagram": 62
+  anagram_c..., anagram_le..., sanagram_..., sanagram_t...,
+  anagram_0..., anagram_1..., anagram_2... (y más)
+  [PENDIENTE] Ver los nombres completos.
+
+
+---------------------------------------------------------------------
+7. CAMBIOS CONOCIDOS DE LA TRADUCCIÓN
+---------------------------------------------------------------------
+- Minijuego de las letras (bin_anagram): en japonés las palabras tenían
+  un número fijo de espacios (p. ej. 8). La traducción cambió la lógica
+  para palabras en español como "DISPARO".
+  [PENDIENTE] Localizar en el EBOOT el código que se modificó.
+- EBOOT.BIN modificado (fecha 2016) y desencriptado.
+- Vídeos re-codificados (fecha 2015).
+- [PENDIENTE] Conseguir el EBOOT original (sin traducir) para comparar.
+
+
+---------------------------------------------------------------------
+8. SIGUIENTES PASOS
+---------------------------------------------------------------------
+[ ] Seguir la referencia (XREF) de "bin_anagram.pak" hasta el código
+    que la usa.
+[ ] Ver los nombres completos de los 62 textos de "anagram".
+[ ] Captura del final de USRDIR (umdimage.dat, umdimage2.dat...).
+[ ] Probar lin_compiler con algún .lin de la versión PSP.
+[ ] Ajustar la dirección base en Ghidra para que coincida con PPSSPP.
+[ ] Empezar una lista de funciones identificadas:
+      Dirección | Nombre que le damos | Qué hace | Cómo lo sabemos
+
+
+---------------------------------------------------------------------
+9. FUNCIONES IDENTIFICADAS
+---------------------------------------------------------------------
+Dirección     Nombre             Qué hace
+0x00000000    (FUN_00000000)     Primera función; llama a FUN_000000a8
+                                 y FUN_00003028 y termina.
+                                 [PROBABLE] Arranque del programa.
